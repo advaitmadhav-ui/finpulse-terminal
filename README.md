@@ -61,8 +61,6 @@ Open a **second, completely separate terminal**, activate your virtual environme
 ```bash
 streamlit run ui/HOME_PAGE.py
 ```
-*the front will boot up on a streamlit based ui and will have a different link from local host
-
 ## 📂 Project Structure
 ```text
 FP/

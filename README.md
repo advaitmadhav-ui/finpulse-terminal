@@ -1,4 +1,4 @@
-readme_content = """# FinPulse 📈
+"""# FinPulse 📈
 **A Quantamental Stock Analysis Dashboard**
 
 FinPulse is an automated, real-time dashboard that combines historical financial market data with AI-driven sentiment analysis. By tracking asset prices and scoring the sentiment of recent news headlines using FinBERT, FinPulse provides a holistic "quantamental" view of the market, helping users identify bullish and bearish trends.
@@ -15,6 +15,34 @@ FinPulse is an automated, real-time dashboard that combines historical financial
 * **Frontend:** Streamlit, Plotly Graph Objects / Express
 * **Backend:** FastAPI, Uvicorn, BackgroundTasks
 * **Database:** SQLite (`finpulse.db`)
+* **Data Sources:** * `yfinance` (15m historical price candles)
+  * NewsAPI (5-day rolling headline fetcher)
+* **AI / ML:** Hugging Face `transformers` (FinBERT)
+* **Data Processing:** Pandas
+
+## 📂 Project Structure
+Code output
+README-v2.md generated successfully.
+
+```text
+FP/
+├── .env                        # Environment variables (NewsAPI Key)
+├── src/
+│   ├── api/
+│   │   └── app.py              # FastAPI core engine
+│   ├── config.py               # Constants, ticker mappings, and DB paths
+│   ├── ingestion/
+│   │   └── price_fetcher.py    # yfinance scraper (self-healing tables)
+│   └── processing/
+│       ├── sentiment_analyzer.py # FinBERT scoring module
+│       └── data_aligner.py     # Analytics & dataframe alignment
+├── data/
+│   └── news_fetcher.py         # NewsAPI integration and raw_news schema
+├── ui/
+│   ├── app.py                  # Main Streamlit entry point
+│   └── pages/
+│       └── 1_Compare_Stocks.py # Multi-stock comparison & sentiment panels
+└── README.md
 * **Data Sources:** * `yfinance` (15m historical price candles)
   * NewsAPI (5-day rolling headline fetcher)
 * **AI / ML:** Hugging Face `transformers` (FinBERT)

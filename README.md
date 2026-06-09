@@ -38,5 +38,5 @@ FP/
 ├── ui/
 │   ├── app.py                  # Main Streamlit entry point
 │   └── pages/
-│       └── 1_Compare_Stocks.py # Multi-stock comparison & sentiment panels
+│       └── Compare_Stocks.py # Multi-stock comparison & sentiment panels
 └── README.md

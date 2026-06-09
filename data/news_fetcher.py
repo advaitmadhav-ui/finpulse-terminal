@@ -4,26 +4,20 @@ import requests
 import os
 import sys
 from datetime import datetime, timedelta
-
-DB_FILE = "finpulse.db"
-
-def initialize_database():
-    """Creates the SQLite database and tables ONLY if they do not exist."""
-    # ... [Paste the rest of the function code here] ...
-
-def requires_news_api_call(ticker, cooldown_hours=3):
-    """Acts as a rate-limit shield."""
+from dotenv import load_dotenv
 
 # Ensure parent directory is in path to import config
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.config import DB_PATH, TICKER_MAP, NEWS_API_KEY, NEWS_BASE_URL
+from src.config import DB_PATH, TICKER_MAP, NEWS_BASE_URL
+
+load_dotenv()
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 def init_db():
     """Initializes the SQLite database schema for storing raw news articles."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Create news table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS raw_news (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,18 +34,41 @@ def init_db():
     conn.close()
     print(f"✅ Database initialized safely at: {DB_PATH}")
 
-def fetch_and_store_news(query_keyword: str):
+def requires_news_api_call(ticker: str, cooldown_hours: int = 3) -> bool:
+    """Checks the local database to see if the cached news for a ticker is stale."""
+    if not os.path.exists(DB_PATH):
+        return True
+        
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT MAX(published_at) FROM raw_news WHERE ticker = ?", (ticker,))
+        result = cursor.fetchone()[0]
+        conn.close()
+        
+        if not result:
+            return True
+            
+        # Parse NewsAPI ISO format: YYYY-MM-DDTHH:MM:SSZ
+        clean_time_str = result.replace('T', ' ').replace('Z', '')
+        latest_db_time = datetime.fromisoformat(clean_time_str)
+        
+        return (datetime.now() - latest_db_time) > timedelta(hours=cooldown_hours)
+    except Exception:
+        return True
+
+def fetch_and_store_news(query_keyword: str, ticker_symbol: str = None):
     """Fetches raw headlines for a keyword and maps them to an official ticker."""
-    ticker = TICKER_MAP.get(query_keyword.lower())
+    ticker = ticker_symbol or TICKER_MAP.get(query_keyword.lower())
     if not ticker:
-        print(f"❌ Keyword '{query_keyword}' is not mapped to any ticker in src/config.py")
+        print(f"❌ Keyword '{query_keyword}' is not mapped to any ticker.")
         return
 
-    if NEWS_API_KEY == "YOUR_NEWSAPI_KEY_HERE" or not NEWS_API_KEY:
+    if not NEWS_API_KEY or NEWS_API_KEY == "YOUR_NEWSAPI_KEY_HERE":
         print("❌ NewsAPI Key missing. Skipping news fetch execution.")
         return
 
-# Calculate a rolling 5-day window
     from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
     
     params = {
@@ -59,12 +76,12 @@ def fetch_and_store_news(query_keyword: str):
         "language": "en",
         "sortBy": "publishedAt",
         "pageSize": 20,
-        "from": from_date  # Prevents the 426 Error by restricting the timeline
+        "from": from_date
     }
     
     headers = {
         "X-Api-Key": NEWS_API_KEY,
-        "User-Agent": "FinPulse-App/1.0"  # Bypasses the 403 requests block
+        "User-Agent": "FinPulse-App/1.0"
     }
 
     try:
@@ -80,7 +97,7 @@ def fetch_and_store_news(query_keyword: str):
             headline = article.get("title")
             source = article.get("source", {}).get("name")
             url = article.get("url")
-            published_at = article.get("publishedAt") # ISO format: YYYY-MM-DDTHH:MM:SSZ
+            published_at = article.get("publishedAt")
 
             if headline and headline != "[Removed]" and published_at:
                 try:
@@ -89,10 +106,9 @@ def fetch_and_store_news(query_keyword: str):
                         VALUES (?, ?, ?, ?, ?)
                     """, (ticker, headline, source, url, published_at))
                     if cursor.rowcount > 0:
-                        inserted_count += 0
-                        inserted_count += cursor.rowcount
+                        inserted_count += 1
                 except sqlite3.Error as e:
-                    print(f"Database insertion skipped for an item: {e}")
+                    print(f"Database insertion skipped: {e}")
 
         conn.commit()
         conn.close()
@@ -103,5 +119,4 @@ def fetch_and_store_news(query_keyword: str):
 
 if __name__ == "__main__":
     init_db()
-    # Test fetch using one of your mapped corporate keywords
     fetch_and_store_news("reliance")

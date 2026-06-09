@@ -5,12 +5,14 @@ import os
 import sys
 import sqlite3
 import pandas as pd
+from datetime import datetime, timedelta
 
+# Fix paths to find the configuration module safely
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.config import TICKER_MAP, DB_PATH
 
-# Import background synchronization workers from your pipeline waves
-from data.news_fetcher import fetch_and_store_news
+# Import synchronized background workers with unified schemas
+from data.news_fetcher import fetch_and_store_news, requires_news_api_call
 from src.ingestion.price_fetcher import fetch_and_store_prices
 from src.processing.sentiment_analyzer import process_pending_news
 from src.processing.data_aligner import align_ticker_data
@@ -22,71 +24,71 @@ app = FastAPI(
 )
 
 def run_pipeline_sync(ticker_symbol: str, keyword: str):
-    """Orchestrates the data collection, sentiment analysis, and caching in a background thread."""
+    """Orchestrates data collection, scoring, and calculations in the background ONLY if stale."""
     try:
-        print(f"🔄 Background Pipeline Auto-Triggered for: {ticker_symbol}")
-        # 1. Pull latest 15m price bars from yfinance (Extended to 5d to handle weekends)
-        fetch_and_store_prices(ticker_symbol, period="60d", interval="15m")
-        
-        # 2. Pull recent headlines from NewsAPI
-        fetch_and_store_news(keyword)
-        
-        # 3. Fire up the FinBERT Hugging Face model to score unanalyzed news
-        process_pending_news()
-        
-        # 4. Pre-calculate the alignment and save it to the SQLite Cache
-        align_ticker_data(ticker_symbol)
-        
-        print(f"✅ Background Pipeline Sync Complete for: {ticker_symbol}")
+        # The Cooldown Shield: Skips hitting the network APIs if local data is fresh
+        if requires_news_api_call(ticker_symbol, cooldown_hours=3):
+            print(f"🔄 Background Pipeline Auto-Triggered for: {ticker_symbol}")
+            
+            # 1. Pull latest price bars
+            fetch_and_store_prices(ticker_symbol, period="60d", interval="15m")
+            
+            # 2. Pull fresh headlines
+            fetch_and_store_news(keyword, ticker_symbol)
+            
+            # 3. Process with FinBERT model
+            process_pending_news()
+            
+            # 4. Re-calculate metrics and update SQLite cache
+            align_ticker_data(ticker_symbol)
+            
+            print(f"✅ Background Pipeline Sync Complete for: {ticker_symbol}")
+        else:
+            print(f"skip Skipping background sync for {ticker_symbol}: Cache is fresh.")
     except Exception as e:
         print(f"❌ Background Pipeline Error: {e}")
 
 @app.get("/api/data/{ticker}")
 def get_ticker_payload(ticker: str, background_tasks: BackgroundTasks):
     """
-    Returns aligned historical candles and sentiment curves instantly from the database cache,
-    then kicks off an asynchronous background task to fetch fresh data for the next refresh.
+    Returns data from the local cache instantly, then queues a background 
+    worker to update data if it has gone stale.
     """
     ticker_upper = ticker.upper()
     if ticker_upper not in TICKER_MAP.values():
-        raise HTTPException(status_code=400, detail=f"Ticker '{ticker_upper}' is not currently tracked.")
+        raise HTTPException(status_code=400, detail=f"Ticker '{ticker_upper}' is not tracked.")
         
-    # Find the matching dictionary keyword needed for the NewsAPI query
     search_keyword = None
     for kw, symbol in TICKER_MAP.items():
         if symbol == ticker_upper:
             search_keyword = kw
             break
 
-    # Register the pipeline functions to run safely in the background after this response is sent
+    # Register the pipeline functions to execute asynchronously after the response is sent
     if search_keyword:
         background_tasks.add_task(run_pipeline_sync, ticker_upper, search_keyword)
 
     try:
-        # --- INSTANT CACHE RETRIEVAL ---
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         table_name = f"analytics_{ticker_upper.replace('.', '_')}"
         
+        # 1. READ ANALYTICS CANDLESTICK DATA FROM STORAGE
         try:
-            # Read the pre-calculated dataframe directly from the database
             cached_df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
             time_series_data = cached_df.to_dict(orient="records")
         except Exception:
-            # Table doesn't exist yet (Background task hasn't finished its first run)
             time_series_data = []
             
-        # Extract recent raw news feed to serve the homepage sidebar card deck
+        # 2. FETCH HIGHLIGHT FEED FROM RAW NEWS SCHEMA
         cursor = conn.cursor()
         cursor.execute("""
             SELECT headline, source, url, published_at, sentiment_score 
             FROM raw_news 
-            WHERE ticker = ? AND sentiment_score IS NOT NULL
+            WHERE ticker = ?
             ORDER BY published_at DESC LIMIT 15
         """, (ticker_upper,))
         
         news_rows = cursor.fetchall()
-        conn.close()
-        
         recent_news = [
             {
                 "Headline": row[0],
@@ -111,5 +113,4 @@ def get_ticker_payload(ticker: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=f"Internal FinPulse execution crash: {str(e)}")
 
 if __name__ == "__main__":
-    # Start the server on port 8000 with auto-reload enabled for development
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)

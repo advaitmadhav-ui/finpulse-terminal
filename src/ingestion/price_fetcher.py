@@ -10,7 +10,8 @@ from src.config import DB_PATH, TICKER_MAP
 
 def init_price_table():
     """Initializes the database schema for storing historical market asset prices."""
-    conn = sqlite3.connect(DB_PATH)
+    # Added timeout to prevent locking errors during initialization
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS historical_prices (
@@ -31,6 +32,9 @@ def fetch_and_store_prices(ticker: str, period: str = "5d", interval: str = "15m
     """Downloads historical asset price candles via yfinance and archives them to SQLite."""
     print(f"📈 Downloading market price data for {ticker} (Interval: {interval})...")
     
+    # Self-healing: ensure table exists before attempting to write
+    init_price_table()
+    
     try:
         # Download data using yfinance
         stock = yf.Ticker(ticker)
@@ -40,18 +44,27 @@ def fetch_and_store_prices(ticker: str, period: str = "5d", interval: str = "15m
             print(f"⚠️ No price history data found for {ticker}.")
             return
             
-        conn = sqlite3.connect(DB_PATH)
+        # Added timeout=30.0 to prevent database locking errors
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         cursor = conn.cursor()
         inserted_count = 0
         
         for index, row in df.iterrows():
-            # Standardize index timestamp into string format
             timestamp_str = index.strftime("%Y-%m-%d %H:%M:%S")
             
+            # Ensure values are cast correctly for SQLite
             cursor.execute("""
                 INSERT OR REPLACE INTO historical_prices (ticker, timestamp, open, high, low, close, volume)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, timestamp_str, row['Open'], row['High'], row['Low'], row['Close'], int(row['Volume'])))
+            """, (
+                ticker, 
+                timestamp_str, 
+                float(row['Open']), 
+                float(row['High']), 
+                float(row['Low']), 
+                float(row['Close']), 
+                int(row['Volume'])
+            ))
             inserted_count += 1
             
         conn.commit()
@@ -63,6 +76,5 @@ def fetch_and_store_prices(ticker: str, period: str = "5d", interval: str = "15m
 
 if __name__ == "__main__":
     init_price_table()
-    # Verify processing pipeline with an initial load
     for kw, ticker_symbol in TICKER_MAP.items():
         fetch_and_store_prices(ticker_symbol)

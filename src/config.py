@@ -1,8 +1,9 @@
 # src/config.py
-import os
+import os 
 
-# Database Path
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../finpulse.db"))
+# Safe Configuration Variables
+DB_PATH = "finpulse.db" 
+NEWS_BASE_URL = "https://newsapi.org/v2/everything"
 
 # Ticker Mapping: Maps common news keywords to official yfinance symbols (.NS for National Stock Exchange)
 TICKER_MAP = {

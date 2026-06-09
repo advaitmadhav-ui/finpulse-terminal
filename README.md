@@ -1,4 +1,4 @@
-"""# FinPulse 📈
+# FinPulse 📈
 **A Quantamental Stock Analysis Dashboard**
 
 FinPulse is an automated, real-time dashboard that combines historical financial market data with AI-driven sentiment analysis. By tracking asset prices and scoring the sentiment of recent news headlines using FinBERT, FinPulse provides a holistic "quantamental" view of the market, helping users identify bullish and bearish trends.

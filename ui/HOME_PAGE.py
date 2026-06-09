@@ -212,7 +212,7 @@ def render_overview_dashboard():
 def render_dynamic_stock_chart(time_series_data, ticker_name):
     """Renders the broker-style chart with dynamic scaling, live anchoring, and clean visible axes."""
     
-    metric_col1, metric_col2, metric_col3, spacer, pill_col = st.columns([1.8, 1.8, 2.2, 0.2, 2.5])
+    metric_col1, metric_col2, metric_col3, spacer, pill_col = st.columns([1.9, 1.9, 2.2, 0.2, 2.5])
     
     with pill_col:
         selected_period = st.pills(

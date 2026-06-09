@@ -1,51 +1,29 @@
 # FinPulse 📈
 **A Quantamental Stock Analysis Dashboard**
 
-FinPulse is an automated, real-time dashboard that combines historical financial market data with AI-driven sentiment analysis. By tracking asset prices and scoring the sentiment of recent news headlines using FinBERT, FinPulse provides a holistic "quantamental" view of the market, helping users identify bullish and bearish trends.
+## 📖 Project Overview
+FinPulse is an automated, real-time dashboard that combines historical financial market data with AI-driven sentiment analysis. By tracking asset prices and scoring the sentiment of recent news headlines using a local FinBERT model, FinPulse provides a holistic "quantamental" view of the market, helping users identify bullish, bearish, and neutral trends for major Indian equities.
 
-## 🚀 Features
-* **Interactive Dashboard:** Built with Streamlit, featuring dynamic Plotly line charts and donut charts.
-* **Multi-Stock Comparison:** Compare up to 8 major Indian equities simultaneously.
-* **AI Sentiment Analysis:** Uses a locally run FinBERT Transformer model to score news headlines as Positive, Negative, or Neutral, generating AI recommendations (Buy/Sell/Hold).
-* **On-Demand Background Sync:** FastAPI backend intelligently triggers data updates in the background when a user views a stock, preventing UI freezing.
-* **Smart API Rate Limiting:** Implements a "Cooldown Shield" to prevent hitting NewsAPI daily limits.
-* **Self-Healing Database:** Thread-safe SQLite database automatically initializes missing tables and handles concurrent background worker writes.
+## 🏗️ Architecture Summary
+FinPulse operates on a decoupled, two-tier architecture:
+* **Frontend UI:** Built with **Streamlit**, featuring interactive Plotly charts for price comparison and donut charts for sentiment visualization.
+* **Backend API:** Built with **FastAPI** and Uvicorn. It handles data fetching, AI processing, and serves as the central data hub.
+* **Database:** A thread-safe, self-healing **SQLite** database (`finpulse.db`) stores historical prices and raw news to minimize API calls and prevent rate-limiting.
+* **AI Engine:** Uses Hugging Face's `transformers` library to run the **FinBERT** model locally for financial sentiment classification.
+* **Data Sources:** `yfinance` for market data and NewsAPI for financial headlines.
 
-## 🏗️ Architecture & Tech Stack
-* **Frontend:** Streamlit, Plotly Graph Objects / Express
-* **Backend:** FastAPI, Uvicorn, BackgroundTasks
-* **Database:** SQLite (`finpulse.db`)
-* **Data Sources:** * `yfinance` (15m historical price candles)
-  * NewsAPI (5-day rolling headline fetcher)
-* **AI / ML:** Hugging Face `transformers` (FinBERT)
-* **Data Processing:** Pandas
+## ⚙️ Setup Instructions
+### 1. Prerequisites
+* Python 3.9 or higher installed on your system.
+* Git installed.
 
-## 📂 Project Structure
-Code output
-README-v2.md generated successfully.
-
-```text
-FP/
-├── .env                        # Environment variables (NewsAPI Key)
-├── src/
-│   ├── api/
-│   │   └── app.py              # FastAPI core engine
-│   ├── config.py               # Constants, ticker mappings, and DB paths
-│   ├── ingestion/
-│   │   └── price_fetcher.py    # yfinance scraper (self-healing tables)
-│   └── processing/
-│       ├── sentiment_analyzer.py # FinBERT scoring module
-│       └── data_aligner.py     # Analytics & dataframe alignment
-├── data/
-│   └── news_fetcher.py         # NewsAPI integration and raw_news schema
-├── ui/
-│   ├── app.py                  # Main Streamlit entry point
-│   └── pages/
-│       └── 1_Compare_Stocks.py # Multi-stock comparison & sentiment panels
-└── README.md
-* **Data Sources:** * `yfinance` (15m historical price candles)
-  * NewsAPI (5-day rolling headline fetcher)
-* **AI / ML:** Hugging Face `transformers` (FinBERT)
-* **Data Processing:** Pandas
+### 2. Environment Setup
+Clone the repository and navigate to the project root (`FP/`). Then, create and activate a virtual environment:
+```bash
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On Mac/Linux:
+source venv/bin/activate
 
 ## 📂 Project Structure

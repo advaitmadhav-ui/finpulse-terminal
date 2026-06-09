@@ -13,6 +13,7 @@ FinPulse operates on a decoupled, two-tier architecture:
 * **Data Sources:** `yfinance` for market data and NewsAPI for financial headlines.
 
 ## ⚙️ Setup Instructions
+
 ### 1. Prerequisites
 * Python 3.9 or higher installed on your system.
 * Git installed.
@@ -21,9 +22,67 @@ FinPulse operates on a decoupled, two-tier architecture:
 Clone the repository and navigate to the project root (`FP/`). Then, create and activate a virtual environment:
 ```bash
 python -m venv venv
+
 # On Windows:
 venv\Scripts\activate
+
 # On Mac/Linux:
 source venv/bin/activate
+```
+### 3. Install Dependencies
+Install all required Python packages:
+```bash
+pip install fastapi uvicorn streamlit pandas yfinance plotly requests transformers torch python-dotenv
+```
+
+### 4. Configure Environment Variables
+Create a `.env` file in the root directory and add your NewsAPI key. **Do not commit this file to version control.**
+```env
+NEWS_API_KEY=your_actual_api_key_here
+```
+
+### 5. Initialize the Database
+Run the following command to build the necessary SQLite tables (`raw_news` and `historical_prices`):
+```bash
+python -c "from data.news_fetcher import init_db; init_db()"
+```
+## 🏃‍♂️ How to Run the Project
+FinPulse requires both the backend and frontend to be running simultaneously in **two separate terminal windows**.
+
+### Terminal 1: Start the Backend API
+Ensure your virtual environment is activated, then start the FastAPI server:
+```bash
+uvicorn src.api.app:app --reload
+```
+*The backend API will boot up and listen for requests at `http://127.0.0.1:8000`*
+
+### Terminal 2: Start the Frontend UI
+Open a **second, completely separate terminal**, activate your virtual environment again, and launch the Streamlit app:
+```bash
+streamlit run ui/pages/1_Compare_Stocks.py
+```
 
 ## 📂 Project Structure
+```text
+FP/
+├── .env                        # Environment variables (NewsAPI Key)
+├── src/
+│   ├── api/
+│   │   └── app.py              # FastAPI core engine
+│   ├── config.py               # Constants, ticker mappings, and DB paths
+│   ├── ingestion/
+│   │   └── price_fetcher.py    # yfinance scraper (self-healing tables)
+│   └── processing/
+│       ├── sentiment_analyzer.py # FinBERT scoring module
+│       └── data_aligner.py     # Analytics & dataframe alignment
+├── data/
+│   └── news_fetcher.py         # NewsAPI integration and raw_news schema
+├── ui/
+│   ├── app.py                  # Main Streamlit entry point
+│   └── pages/
+│       └── 1_Compare_Stocks.py # Multi-stock comparison & sentiment panels
+└── README.md
+```
+
+
+

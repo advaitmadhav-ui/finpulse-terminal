@@ -1,0 +1,16 @@
+# Environments
+.env
+.venv/
+venv/
+env/
+
+# Databases
+finpulse.db
+*.sqlite3
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store

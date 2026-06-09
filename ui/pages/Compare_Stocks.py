@@ -46,7 +46,7 @@ else:
 
 # 3. Main Logic
 if not selected_names:
-    st.info("👈 Please select at least one stock to view the dashboard.")
+    st.info(" Please select at least one stock to view the dashboard.")
 else:
     all_data = []
     api_responses = {} # Store responses so we don't hit the API twice!
@@ -98,7 +98,7 @@ else:
 
 # --- SENTIMENT PANELS SECTION ---
     st.markdown("---")
-    st.subheader("📰 Sentiment Analysis & Recommendations")
+    st.subheader("Sentiment Analysis & Recommendations")
     
     for name in selected_names:
         data = api_responses.get(name, {})
@@ -129,11 +129,11 @@ else:
                 if total_articles == 0:
                     st.warning("No recent news scored for this asset yet.")
                 elif pos > neg:
-                    st.success("📈 **BUY / BULLISH** (Positive news trend detected)")
+                    st.success("**BUY / BULLISH** (Positive news trend detected)")
                 elif neg > pos:
-                    st.error("📉 **SELL / BEARISH** (Negative news trend detected)")
+                    st.error("**SELL / BEARISH** (Negative news trend detected)")
                 else:
-                    st.info("⚖️ **HOLD / NEUTRAL** (Mixed or neutral news volume)")
+                    st.info(" **HOLD / NEUTRAL** (Mixed or neutral news volume)")
 
             with col2:
                 if total_articles > 0:

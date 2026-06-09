@@ -155,7 +155,7 @@ def render_overview_dashboard():
     lead_title_col, lead_toggle_col = st.columns([3, 1])
     
     with lead_title_col:
-        st.markdown("### 🏆 Macro Returns Leaderboard")
+        st.markdown("###  Macro Returns Leaderboard")
         st.caption("Ranked absolute performance of watchlisted assets across historical macro windows.")
         
     with lead_toggle_col:
@@ -395,7 +395,7 @@ def render_dynamic_stock_chart(time_series_data, ticker_name):
 # 3. MAIN PAGE ROUTING
 # ==========================================
 
-st.title("📊 FinPulse Dashboard")
+st.title("FinPulse Dashboard")
 
 selected_label = st.selectbox(
     "Select Asset Tracker:", 
@@ -425,7 +425,7 @@ try:
             render_dynamic_stock_chart(time_series, target_ticker)
                 
         with col2:
-            st.subheader("📰 Live Asset Sentiment Feed")
+            st.subheader("Live Asset Sentiment Feed")
             if recent_news:
                 with st.container(height=400):
                     for item in recent_news:

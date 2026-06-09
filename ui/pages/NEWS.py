@@ -15,7 +15,7 @@ st.set_page_config(page_title="FinPulse | Market News", layout="wide")
 st_autorefresh(interval=90000, limit=500, key="global_news_refresh")
 
 # --- HEADER SECTION ---
-st.title("📰 Market News Feed")
+st.title("Market News Feed")
 
 # --- BACKEND DATA CONSUMER ---
 @st.cache_data(ttl=30)

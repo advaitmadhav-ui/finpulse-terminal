@@ -31,6 +31,3 @@ KEYWORD_MAP = {
 # Inverse map for easy lookups in UI titles
 REVERSE_TICKER_MAP = {v: k.upper() for k, v in TICKER_MAP.items()}
 
-# NewsAPI Configurations
-NEWS_API_KEY = os.getenv("NEWS_API_KEY", "8e8216ced6bd427aa0e0990635b25369")
-NEWS_BASE_URL = "https://newsapi.org/v2/everything"

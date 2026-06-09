@@ -59,28 +59,35 @@ uvicorn src.api.app:app --reload
 ### Terminal 2: Start the Frontend UI
 Open a **second, completely separate terminal**, activate your virtual environment again, and launch the Streamlit app:
 ```bash
-streamlit run ui/pages/1_Compare_Stocks.py
+streamlit run ui/HOME_PAGE.py
 ```
+*the front will boot up on a streamlit based ui and will have a different link from local host
 
 ## 📂 Project Structure
 ```text
 FP/
-├── .env                        # Environment variables (NewsAPI Key)
 ├── src/
 │   ├── api/
-│   │   └── app.py              # FastAPI core engine
-│   ├── config.py               # Constants, ticker mappings, and DB paths
+│   │   ├── __init__.py
+│   │   └── app.py                 # FastAPI core engine
 │   ├── ingestion/
-│   │   └── price_fetcher.py    # yfinance scraper (self-healing tables)
-│   └── processing/
-│       ├── sentiment_analyzer.py # FinBERT scoring module
-│       └── data_aligner.py     # Analytics & dataframe alignment
-├── data/
-│   └── news_fetcher.py         # NewsAPI integration and raw_news schema
+│   │   ├── __init__.py
+│   │   └── price_fetcher.py       # yfinance scraper
+│   ├── processing/
+│   │   ├── __init__.py
+│   │   ├── data_aligner.py        # Analytics & dataframe alignment
+│   │   └── sentiment_analyzer.py  # FinBERT scoring module
+│   ├── __init__.py
+│   └── config.py                  # Constants and database config
 ├── ui/
-│   ├── app.py                  # Main Streamlit entry point
-│   └── pages/
-│       └── 1_Compare_Stocks.py # Multi-stock comparison & sentiment panels
+│   ├── pages/
+│   │   ├── Compare_Stocks.py      # Multi-stock comparison & sentiment panels
+│   │   ├── NEWS.py                # News feed module
+│   │   └── SENTIMENT_ANALYTICS.py # Dedicated sentiment views
+│   └── HOME_PAGE.py               # Main Streamlit entry point
+├── .env                           # Environment variables (NewsAPI Key)
+├── .env.example                   # Template for environment variables
+├── finpulse.db                    # SQLite database (Self-healing)
 └── README.md
 ```
 

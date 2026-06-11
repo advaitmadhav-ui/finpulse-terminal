@@ -1,42 +1,93 @@
 # FinPulse 📈
 **A Quantamental Stock Analysis Dashboard**
 
-FinPulse is an automated, real-time dashboard that combines historical financial market data with AI-driven sentiment analysis. By tracking asset prices and scoring the sentiment of recent news headlines using FinBERT, FinPulse provides a holistic "quantamental" view of the market, helping users identify bullish and bearish trends.
+## 📖 Project Overview
+FinPulse is an automated, real-time dashboard that combines historical financial market data with AI-driven sentiment analysis. By tracking asset prices and scoring the sentiment of recent news headlines using a local FinBERT model, FinPulse provides a holistic "quantamental" view of the market, helping users identify bullish, bearish, and neutral trends for major Indian equities.
 
-## 🚀 Features
-* **Interactive Dashboard:** Built with Streamlit, featuring dynamic Plotly line charts and donut charts.
-* **Multi-Stock Comparison:** Compare up to 8 major Indian equities simultaneously.
-* **AI Sentiment Analysis:** Uses a locally run FinBERT Transformer model to score news headlines as Positive, Negative, or Neutral, generating AI recommendations (Buy/Sell/Hold).
-* **On-Demand Background Sync:** FastAPI backend intelligently triggers data updates in the background when a user views a stock, preventing UI freezing.
-* **Smart API Rate Limiting:** Implements a "Cooldown Shield" to prevent hitting NewsAPI daily limits.
-* **Self-Healing Database:** Thread-safe SQLite database automatically initializes missing tables and handles concurrent background worker writes.
+## 🏗️ Architecture Summary
+FinPulse operates on a decoupled, two-tier architecture:
+* **Frontend UI:** Built with **Streamlit**, featuring interactive Plotly charts for price comparison and donut charts for sentiment visualization.
+* **Backend API:** Built with **FastAPI** and Uvicorn. It handles data fetching, AI processing, and serves as the central data hub.
+* **Database:** A thread-safe, self-healing **SQLite** database (`finpulse.db`) stores historical prices and raw news to minimize API calls and prevent rate-limiting.
+* **AI Engine:** Uses Hugging Face's `transformers` library to run the **FinBERT** model locally for financial sentiment classification.
+* **Data Sources:** `yfinance` for market data and NewsAPI for financial headlines.
 
-## 🏗️ Architecture & Tech Stack
-* **Frontend:** Streamlit, Plotly Graph Objects / Express
-* **Backend:** FastAPI, Uvicorn, BackgroundTasks
-* **Database:** SQLite (`finpulse.db`)
-* **Data Sources:** * `yfinance` (15m historical price candles)
-  * NewsAPI (5-day rolling headline fetcher)
-* **AI / ML:** Hugging Face `transformers` (FinBERT)
-* **Data Processing:** Pandas
+## ⚙️ Setup Instructions
 
+### 1. Prerequisites
+* Python 3.9 or higher installed on your system.
+* Git installed.
+
+### 2. Environment Setup
+Clone the repository and navigate to the project root (`FP/`). Then, create and activate a virtual environment:
+```bash
+python -m venv venv
+
+# On Windows:
+venv\Scripts\activate
+
+# On Mac/Linux:
+source venv/bin/activate
+```
+### 3. Install Dependencies
+Install all required Python packages:
+```bash
+pip install fastapi uvicorn streamlit pandas yfinance plotly requests transformers torch python-dotenv
+```
+
+### 4. Configure Environment Variables
+Create a `.env` file in the root directory and add your NewsAPI key. **Do not commit this file to version control.**
+```env
+NEWS_API_KEY=your_actual_api_key_here
+```
+
+### 5. Initialize the Database
+Run the following command to build the necessary SQLite tables (`raw_news` and `historical_prices`):
+```bash
+python -c "from data.news_fetcher import init_db; init_db()"
+```
+## 🏃‍♂️ How to Run the Project
+FinPulse requires both the backend and frontend to be running simultaneously in **two separate terminal windows**.
+
+### Terminal 1: Start the Backend API
+Ensure your virtual environment is activated, then start the FastAPI server:
+```bash
+uvicorn src.api.app:app --reload
+```
+*The backend API will boot up and listen for requests at `http://127.0.0.1:8000`*
+
+### Terminal 2: Start the Frontend UI
+Open a **second, completely separate terminal**, activate your virtual environment again, and launch the Streamlit app:
+```bash
+streamlit run ui/HOME_PAGE.py
+```
 ## 📂 Project Structure
 ```text
 FP/
-├── .env                        # Environment variables (NewsAPI Key)
 ├── src/
 │   ├── api/
-│   │   └── app.py              # FastAPI core engine
-│   ├── config.py               # Constants, ticker mappings, and DB paths
+│   │   ├── __init__.py
+│   │   └── app.py                 # FastAPI core engine
 │   ├── ingestion/
-│   │   └── price_fetcher.py    # yfinance scraper (self-healing tables)
-│   └── processing/
-│       ├── sentiment_analyzer.py # FinBERT scoring module
-│       └── data_aligner.py     # Analytics & dataframe alignment
-├── data/
-│   └── news_fetcher.py         # NewsAPI integration and raw_news schema
+│   │   ├── __init__.py
+│   │   └── price_fetcher.py       # yfinance scraper
+│   ├── processing/
+│   │   ├── __init__.py
+│   │   ├── data_aligner.py        # Analytics & dataframe alignment
+│   │   └── sentiment_analyzer.py  # FinBERT scoring module
+│   ├── __init__.py
+│   └── config.py                  # Constants and database config
 ├── ui/
-│   ├── app.py                  # Main Streamlit entry point
-│   └── pages/
-│       └── 1_Compare_Stocks.py # Multi-stock comparison & sentiment panels
+│   ├── pages/
+│   │   ├── Compare_Stocks.py      # Multi-stock comparison & sentiment panels
+│   │   ├── NEWS.py                # News feed module
+│   │   └── SENTIMENT_ANALYTICS.py # Dedicated sentiment views
+│   └── HOME_PAGE.py               # Main Streamlit entry point
+├── .env                           # Environment variables (NewsAPI Key)
+├── .env.example                   # Template for environment variables
+├── finpulse.db                    # SQLite database (Self-healing)
 └── README.md
+```
+
+
+

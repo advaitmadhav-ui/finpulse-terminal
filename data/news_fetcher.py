@@ -6,11 +6,15 @@ import requests
 import spacy
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import time
+import random
 import sys
+import feedparser 
+from src.config import TICKER_ALIASES, DB_PATH, NEWS_BASE_URL, RSS_FEEDS, USER_AGENTS
 
 # Pull configurations
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.config import TICKER_ALIASES, DB_PATH, NEWS_BASE_URL
+
 
 load_dotenv()
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
@@ -67,11 +71,7 @@ def strict_classify_headline(headline):
                 # 1. Unambiguous matches (Trusted immediately without NLP)
                 # "RIL", "Reliance Industries", "HDFC" cannot be common nouns.
                 if matched_text != "reliance":
-                    return ticker
-                    
-                # 2. Ambiguous match: "reliance"
-                # We deploy spaCy here to ensure it's not being used as a common noun 
-                # (e.g., "China to reduce US reliance")
+                    return ticker    
                 if doc is None:
                     doc = nlp(headline)
                     
@@ -80,11 +80,6 @@ def strict_classify_headline(headline):
                         # CONDITION A: spaCy officially recognizes it as a Proper Noun or Entity
                         if token.pos_ == "PROPN" or token.ent_type_ in ["ORG", "PERSON", "PRODUCT", "GPE"]:
                             return ticker
-                            
-                        # CONDITION B: spaCy small-model fallback logic
-                        # If spaCy accidentally tags it as a standard noun, we verify its context.
-                        # If it is Capitalized AND not preceded by context words that indicate
-                        # the common dictionary noun (like "US reliance" or "heavy reliance").
                         if token.text == "Reliance":
                             prev_token = doc[token.i - 1].text.lower() if token.i > 0 else ""
                             blacklist = ["us", "heavy", "over", "on", "reduce", "increased", "their", "more"]
@@ -96,64 +91,131 @@ def strict_classify_headline(headline):
                 
     return None 
 
-def fetch_and_store_news(query_string):
-    """Fetches, contextually filters, and stores verified news."""
-    if not NEWS_API_KEY or NEWS_API_KEY == "":
-        print("❌ Error: NEWS_API_KEY is missing.")
-        return
-
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=2)
+def normalize_and_store(cursor, assigned_ticker, headline, description, url_link, published_at, source):
+    """
+    NORMALIZATION GATEWAY:
+    Checks the database to ensure we don't save the same news twice.
+    It blocks the insert if the URL is identical OR if the Headline is identical.
+    """
+    # Check for duplicates based on URL or Exact Headline
+    cursor.execute('''
+        SELECT id FROM raw_news 
+        WHERE url = ? OR headline = ?
+    ''', (url_link, headline))
     
-    params = {
-        "q": query_string,
-        "from": start_date.strftime("%Y-%m-%d"),
-        "to": end_date.strftime("%Y-%m-%d"),
-        "language": "en",
-        "sortBy": "publishedAt",
-        "apiKey": NEWS_API_KEY,
-        "pageSize": 50 
-    }
-
+    if cursor.fetchone():
+        return False # Duplicate found! Reject it.
+        
     try:
-        response = requests.get(NEWS_BASE_URL, params=params, timeout=10)
-        if response.status_code != 200:
-            print(f"NewsAPI Error: {response.status_code} - {response.text}")
-            return
+        cursor.execute('''
+            INSERT INTO raw_news (ticker, headline, description, url, published_at, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (assigned_ticker, headline, description, url_link, published_at, source))
+        return True # Successfully normalized and saved
+    except sqlite3.IntegrityError:
+        return False
 
-        articles = response.json().get("articles", [])
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        inserted_count = 0
-        for article in articles:
-            headline = article.get("title", "")
-            description = article.get("description", "")
-            url_link = article.get("url", "")
-            published_at = article.get("publishedAt", "")
-            source = article.get("source", {}).get("name", "Unknown")
+def fetch_rss_news(cursor):
+    """Scrapes raw XML/RSS feeds from the web safely using Anti-Ban mechanics."""
+    print("🕸️ Scraping live RSS web feeds (Anti-Ban Active)...")
+    inserted_count = 0
+    
+    # Define our strict cutoff time (e.g., 2 days ago) to only process recent news
+    cutoff_time = datetime.now() - timedelta(days=2)
+    
+    for feed_url in RSS_FEEDS:
+        try:
+            # 1. THE DISGUISE: Pick a random web browser profile for this specific feed
+            current_agent = random.choice(USER_AGENTS)
+            feedparser.USER_AGENT = current_agent
             
-            # --- APPLY HYBRID CLASSIFICATION ---
-            assigned_ticker = strict_classify_headline(headline)
+            feed = feedparser.parse(feed_url)
             
-            if assigned_ticker:
-                try:
-                    cursor.execute('''
-                        INSERT INTO raw_news (ticker, headline, description, url, published_at, source)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (assigned_ticker, headline, description, url_link, published_at, source))
-                    inserted_count += 1
-                except sqlite3.IntegrityError:
-                    pass 
+            for entry in feed.entries:
+                # 2. STRICT DATE FILTERING: Check if the article is from "Today" / our window
+                # feedparser automatically converts RSS dates into a struct_time object
+                if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                    from time import mktime
+                    entry_dt = datetime.fromtimestamp(mktime(entry.published_parsed))
                     
-        conn.commit()
-        conn.close()
-        print(f"🎯 NLP Filter: Fetched query '{query_string}' -> Classified & Saved {inserted_count} verified articles.")
-        
-    except Exception as e:
-        print(f"❌ Error fetching news: {e}")
+                    # If the article is older than 48 hours, skip it immediately to save CPU
+                    if entry_dt < cutoff_time:
+                        continue 
+                
+                headline = entry.get("title", "")
+                description = entry.get("summary", "")
+                url_link = entry.get("link", "")
+                published_at = entry.get("published", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"))
+                source = feed.feed.get("title", "RSS Scraper")
+                
+                # Pass through NLP Bouncer and Normalizer
+                assigned_ticker = strict_classify_headline(headline)
+                if assigned_ticker:
+                    if normalize_and_store(cursor, assigned_ticker, headline, description, url_link, published_at, source):
+                        inserted_count += 1
+                        
+            # 3. POLITENESS DELAY: Sleep for a random amount of time (2 to 5 seconds) 
+            # before hitting the next website so we don't trigger their DDoS protection.
+            sleep_time = random.uniform(2.0, 5.0)
+            print(f"   [Sleeping for {sleep_time:.1f}s to avoid rate limits...]")
+            time.sleep(sleep_time)
+            
+        except Exception as e:
+            print(f"⚠️ RSS Scrape Error for {feed_url}: {e}")
+            
+    return inserted_count
+def fetch_and_store_news(query_string):
+    """
+    DUAL-INTAKE PIPELINE: 
+    1. Fetches from NewsAPI
+    2. Scrapes from Web RSS
+    3. Normalizes and stores unified results.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # --- INTAKE 1: RSS WEB SCRAPING ---
+    rss_saved = fetch_rss_news(cursor)
+    
+    # --- INTAKE 2: API FETCHING ---
+    api_saved = 0
+    if NEWS_API_KEY and NEWS_API_KEY != "":
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=2)
+        params = {
+            "q": query_string, "from": start_date.strftime("%Y-%m-%d"), 
+            "to": end_date.strftime("%Y-%m-%d"), "language": "en", 
+            "sortBy": "publishedAt", "apiKey": NEWS_API_KEY, "pageSize": 50 
+        }
+        try:
+            print(f"📡 Querying NewsAPI for '{query_string}'...")
+            response = requests.get(NEWS_BASE_URL, params=params, timeout=10)
+            if response.status_code == 200:
+                articles = response.json().get("articles", [])
+                for article in articles:
+                    headline = article.get("title", "")
+                    description = article.get("description", "")
+                    url_link = article.get("url", "")
+                    published_at = article.get("publishedAt", "")
+                    source = article.get("source", {}).get("name", "Unknown")
+                    
+                    assigned_ticker = strict_classify_headline(headline)
+                    if assigned_ticker:
+                        # The API data passes through the exact same Normalizer
+                        if normalize_and_store(cursor, assigned_ticker, headline, description, url_link, published_at, source):
+                            api_saved += 1
+        except Exception as e:
+            print(f"❌ API Error: {e}")
+
+    conn.commit()
+    conn.close()
+    
+    total = rss_saved + api_saved
+    if total > 0:
+        print(f"🎯 Dual-Intake Complete: Saved {total} unique, verified articles ({rss_saved} Web, {api_saved} API).")
 
 def requires_news_api_call(ticker, cooldown_hours=3):
+    # [Keep your existing requires_news_api_call logic exactly as it is]
     if not os.path.exists(DB_PATH): return True
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()

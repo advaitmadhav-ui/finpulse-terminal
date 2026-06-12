@@ -2,11 +2,12 @@
 import os
 import sys
 from dotenv import load_dotenv
+import feedparser
 
 # Fix paths to find the configuration module safely
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-from src.config import TICKER_MAP
+from src.config import TICKER_MAP ,RSS_FEEDS
 from src.ingestion.price_fetcher import fetch_and_store_prices, requires_price_update, init_price_table
 from data.news_fetcher import fetch_and_store_news, requires_news_api_call, init_db
 from src.processing.sentiment_analyzer import process_pending_news

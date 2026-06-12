@@ -13,7 +13,7 @@ from src.config import TICKER_MAP, DB_PATH
 
 # Import synchronized background workers with unified schemas
 from data.news_fetcher import fetch_and_store_news, requires_news_api_call, init_db
-from src.ingestion.price_fetcher import fetch_and_store_prices
+from src.ingestion.price_fetcher import fetch_and_store_prices, requires_price_update
 from src.processing.sentiment_analyzer import process_pending_news
 from src.processing.data_aligner import align_ticker_data
 

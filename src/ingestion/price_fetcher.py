@@ -4,7 +4,7 @@ import yfinance as yf
 import os
 import sys
 import pandas as pd
-
+from datetime import datetime, timedelta
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.config import DB_PATH, TICKER_MAP
 
@@ -73,6 +73,34 @@ def fetch_and_store_prices(ticker: str, period: str = "5d", interval: str = "15m
         
     except Exception as e:
         print(f"❌ Error downloading market prices for {ticker}: {e}")
+
+def requires_price_update(ticker: str, cooldown_minutes: int = 15):
+    """Checks if price data is stale (older than 15 minutes)."""
+    if not os.path.exists(DB_PATH): return True
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Ensure table exists before querying
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='historical_prices'")
+        if not cursor.fetchone():
+            conn.close()
+            return True
+            
+        cursor.execute('SELECT MAX(timestamp) FROM historical_prices WHERE ticker = ?', (ticker,))
+        latest_date = cursor.fetchone()[0]
+        conn.close()
+
+        if not latest_date: return True
+        
+        latest_dt = datetime.strptime(latest_date, "%Y-%m-%d %H:%M:%S")
+        if (datetime.now() - latest_dt) > timedelta(minutes=cooldown_minutes): 
+            return True
+            
+        return False
+    except Exception:
+        return True
 
 if __name__ == "__main__":
     init_price_table()

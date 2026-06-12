@@ -9,7 +9,7 @@ from src.config import DB_PATH
 
 def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
     """Combines irregular news sentiment points with structured historical price candles and caches them."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     
     # 1. Pull historical candle records
     price_query = "SELECT timestamp, open, high, low, close, volume FROM historical_prices WHERE ticker = ?"
@@ -25,8 +25,12 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
         print(f"⚠️ Cannot perform alignment. No historical price candles exist for {ticker_symbol}")
         return pd.DataFrame()
 
-    # Normalize price time indices to datetime structures
-    price_df['datetime'] = pd.to_datetime(price_df['timestamp'])
+    # --- BULLETPROOF DATE PARSING ---
+    price_df['datetime'] = pd.to_datetime(price_df['timestamp'], errors='coerce')
+    # Safely strip timezones if they exist, ignore if they are already naive
+    if price_df['datetime'].dt.tz is not None:
+        price_df['datetime'] = price_df['datetime'].dt.tz_localize(None)
+        
     price_df = price_df.sort_values('datetime')
 
     if news_df.empty:
@@ -35,8 +39,11 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
         price_df['headline'] = ""
         aligned_df = price_df
     else:
-        # Convert ISO news format (e.g., 2026-06-08T14:30:00Z) to standard matchable datetime objects
-        news_df['datetime'] = pd.to_datetime(news_df['published_at']).dt.tz_localize(None)
+        # Safely parse and strip timezones for news dates as well
+        news_df['datetime'] = pd.to_datetime(news_df['published_at'], errors='coerce')
+        if news_df['datetime'].dt.tz is not None:
+            news_df['datetime'] = news_df['datetime'].dt.tz_localize(None)
+            
         news_df = news_df.sort_values('datetime')
 
         # Use a backward tolerance merge (merge_asof) to pair each headline with the upcoming closed market candle
@@ -52,11 +59,9 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
         aligned_df['headline'] = aligned_df['headline'].fillna("")
         
     # --- SQLITE CACHING LAYER ---
-    # Convert datetime back to string for SQLite storage
     aligned_df['datetime_str'] = aligned_df['datetime'].astype(str)
     
-    # Save this pre-calculated matrix back to SQLite
-    write_conn = sqlite3.connect(DB_PATH)
+    write_conn = sqlite3.connect(DB_PATH, timeout=30.0)
     table_name = f"analytics_{ticker_symbol.replace('.', '_')}"
     
     # Drop the complex datetime object before saving to database
@@ -68,7 +73,7 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     # Test alignment matrix verification logic
-    test_ticker = "RELIANCE.NS"
+    test_ticker = "HDFCBANK.NS" # Changed to one of your new valid tickers
     result = align_ticker_data(test_ticker)
     if not result.empty:
         print(f"📊 Alignment complete and cached for {test_ticker}. Matched shape matrix: {result.shape}")

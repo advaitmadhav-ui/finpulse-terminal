@@ -5,46 +5,89 @@ import os
 DB_PATH = "finpulse.db" 
 NEWS_BASE_URL = "https://newsapi.org/v2/everything"
 
-# Maps UI labels to Yahoo Finance tickers
+# src/config.py
+
+# 1. THE TICKER MAP (Used by Yahoo Finance)
 TICKER_MAP = {
-    "Reliance Industries": "RELIANCE.NS",
+    # Banking
     "HDFC Bank": "HDFCBANK.NS",
-    "ICICI Bank": "ICICIBANK.NS",
-    "Infosys": "INFY.NS",
-    "Tata Consultancy Services": "TCS.NS",
-    "Kotak Mahindra": "KOTAKBANK.NS",
     "State Bank of India": "SBIN.NS",
-    "Adani Enterprises": "ADANIENT.NS"
+    
+    # Retail
+    "Trent": "TRENT.NS",
+    "DMart": "DMART.NS",
+    
+    # Manufacturing
+    "Siemens India": "SIEMENS.NS",
+    "ABB India": "ABB.NS",
+    
+    # Automobile
+    "Maruti Suzuki": "MARUTI.NS",
+    "Mahindra & Mahindra": "M&M.NS",
+    
+    # Global Tech (No .NS suffix because they trade on the NASDAQ in the US)
+    "Microsoft": "MSFT",
+    "NVIDIA": "NVDA"
 }
 
-# --- NEW STRICT CLASSIFICATION MAPPING ---
-# Uses Regex Word Boundaries (\b) so "SBI" doesn't match words containing 'sbi'
+# 2. THE NLP BOUNCER ALIASES (Must be strictly lowercase)
+# These regex patterns ensure the NLP engine catches various ways news sites write the names.
 TICKER_ALIASES = {
-    "RELIANCE.NS": [r"\breliance industries\b", r"\bril\b", r"\breliance\b"],
-    "HDFCBANK.NS": [r"\bhdfc bank\b", r"\bhdfc\b"],
-    "ICICIBANK.NS": [r"\bicici bank\b", r"\bicici\b"],
-    "INFY.NS": [r"\binfosys\b", r"\binfy\b"],
-    "TCS.NS": [r"\btcs\b", r"\btata consultancy services\b", r"\btata consultancy\b"],
-    "KOTAKBANK.NS": [r"\bkotak mahindra\b", r"\bkotak bank\b", r"\bkotak\b"],
+    "HDFCBANK.NS": [r"\bhdfc\b", r"\bhdfc bank\b"],
     "SBIN.NS": [r"\bsbi\b", r"\bstate bank of india\b", r"\bstate bank\b"],
-    "ADANIENT.NS": [r"\badani enterprises\b", r"\badani group\b", r"\badani\b"]
+    "TRENT.NS": [r"\btrent\b", r"\btrent limited\b"],
+    "DMART.NS": [r"\bdmart\b", r"\bd-mart\b", r"\bavenue supermarts\b"],
+    "SIEMENS.NS": [r"\bsiemens\b"],
+    "ABB.NS": [r"\babb\b", r"\babb india\b"],
+    "MARUTI.NS": [r"\bmaruti\b", r"\bmaruti suzuki\b"],
+    "M&M.NS": [r"\bmahindra\b", r"\bm&m\b", r"\bmahindra & mahindra\b"],
+    "MSFT": [r"\bmicrosoft\b", r"\bmsft\b"],
+    "NVDA": [r"\bnvidia\b", r"\bnvda\b"]
 }
 
 REVERSE_TICKER_MAP = {v: k.upper() for k, v in TICKER_MAP.items()}
 
 # These are live RSS feeds for Indian Financial Markets
-RSS_FEEDS = [
-    "https://economictimes.indiatimes.com/markets/rssfeeds/19770215.cms", 
-    "https://economictimes.indiatimes.com/news/company/rssfeeds/2146843.cms",
-    "https://www.livemint.com/rss/markets",
-    "https://www.moneycontrol.com/rss/marketreports.xml",
-    "https://www.moneycontrol.com/rss/business.xml",
-    "https://www.business-standard.com/rss/markets-106.rss",
-    "https://www.business-standard.com/rss/companies-101.rss",
-    "https://www.thehindubusinessline.com/markets/feeder/default.rss",
-    "https://www.financialexpress.com/market/feed/",
-    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=RELIANCE.NS,HDFCBANK.NS,ICICIBANK.NS,INFY.NS,TCS.NS,KOTAKBANK.NS,SBIN.NS,ADANIENT.NS"
-]
+# src/config.py
+
+
+# src/config.py
+
+RSS_FEEDS = {
+    "HDFC Bank": [
+        "https://news.google.com/rss/search?q=HDFC+Bank+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://www.moneycontrol.com/rss/mcfeed.xml",
+        "https://economictimes.indiatimes.com/markets/stocks/news/rssfeeds/21468428.cms"
+    ],
+    "DMart": [
+        "https://news.google.com/rss/search?q=Avenue+Supermarts+DMart+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://www.moneycontrol.com/rss/business.xml"
+    ],
+    "Siemens": [
+        "https://news.google.com/rss/search?q=Siemens+India+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://economictimes.indiatimes.com/markets/stocks/news/rssfeeds/21468428.cms"
+    ],
+    "ABB India": [
+        "https://news.google.com/rss/search?q=ABB+India+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://www.moneycontrol.com/rss/business.xml"
+    ],
+    "Maruti Suzuki": [
+        "https://news.google.com/rss/search?q=Maruti+Suzuki+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://auto.economictimes.indiatimes.com/rss/feed"
+    ],
+    "M&M": [
+        "https://news.google.com/rss/search?q=Mahindra+and+Mahindra+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://www.moneycontrol.com/rss/business.xml"
+    ],
+    "Microsoft": [
+        "https://news.google.com/rss/search?q=Microsoft+MSFT+stock+when:1y&hl=en-US&gl=US&ceid=US:en",
+        "https://feeds.finance.yahoo.com/rss/2.0/headline?s=MSFT&region=US&lang=en-US"
+    ],
+    "NVIDIA": [
+        "https://news.google.com/rss/search?q=NVIDIA+NVDA+stock+when:1y&hl=en-US&gl=US&ceid=US:en",
+        "https://feeds.finance.yahoo.com/rss/2.0/headline?s=NVDA&region=US&lang=en-US"
+    ]
+}
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15",

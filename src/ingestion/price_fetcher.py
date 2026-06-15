@@ -5,6 +5,7 @@ import os
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.config import DB_PATH, TICKER_MAP
 
@@ -36,8 +37,10 @@ def fetch_and_store_prices(ticker: str, period: str = "5d", interval: str = "15m
     init_price_table()
     
     try:
-        # Download data using yfinance
+        # REVERTED: yfinance needs the raw ticker (e.g., 'M&M.NS'), NOT the URL-encoded version
+# Download data using yfinance
         stock = yf.Ticker(ticker)
+        # ADDED: prepost=True forces Yahoo to return 4:00 AM to 8:00 PM data
         df = stock.history(period=period, interval=interval)
         
         if df.empty:

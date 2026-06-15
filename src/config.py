@@ -59,6 +59,11 @@ RSS_FEEDS = {
         "https://www.moneycontrol.com/rss/mcfeed.xml",
         "https://economictimes.indiatimes.com/markets/stocks/news/rssfeeds/21468428.cms"
     ],
+    "State Bank of India": [
+        "https://news.google.com/rss/search?q=State+Bank+of+India+SBI+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SBIN.NS&region=IN&lang=en-IN",
+        "https://www.moneycontrol.com/rss/business.xml"
+    ], 
     "DMart": [
         "https://news.google.com/rss/search?q=Avenue+Supermarts+DMart+stock+when:1y&hl=en-IN&gl=IN&ceid=IN:en",
         "https://www.moneycontrol.com/rss/business.xml"

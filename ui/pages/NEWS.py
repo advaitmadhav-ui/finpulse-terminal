@@ -10,28 +10,52 @@ from streamlit_autorefresh import st_autorefresh
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.config import TICKER_MAP
 
+def get_logo(asset_name):
+    domains = {
+        "HDFC Bank": "hdfcbank.com", "State Bank of India": "onlinesbi.sbi",
+        "Trent": "westside.com", "DMart": "dmartindia.com",
+        "Siemens India": "siemens.com", "ABB India": "abb.com",
+        "Maruti Suzuki": "marutisuzuki.com", "Mahindra & Mahindra": "mahindra.com",
+        "Microsoft": "microsoft.com", "NVIDIA": "nvidia.com"
+    }
+    domain = domains.get(asset_name, "google.com")
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+
 # ==========================================
 # 0. CUSTOM CSS THEMING
 # ==========================================
 def inject_custom_css():
     st.markdown("""
         <style>
-        /* Base Theme Adjustments */
         .block-container { padding-top: 2rem; padding-bottom: 2rem; }
         
-        /* Smooth Borders and Backgrounds for Cards */
         div[data-testid="stVerticalBlock"] > div[style*="border"] {
             border-radius: 12px !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
             background-color: #111520 !important;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        div[data-testid="stVerticalBlock"] > div[style*="border"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
         }
         
-        /* Metric Typography */
+        /* Dynamic Terminals Hyperlinks */
+        .news-link {
+            color: #ffffff !important;
+            text-decoration: none !important;
+            transition: color 0.15s ease-in-out !important;
+        }
+        .news-link:hover {
+            color: #22ab59 !important;
+            text-decoration: underline !important;
+        }
+        
         div[data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 700 !important; }
         div[data-testid="stMetricLabel"] { color: #8a92a6 !important; font-size: 14px !important; }
         
-        /* Selectbox and Input styling */
         .stSelectbox div[data-baseweb="select"], .stTextInput input {
             background-color: #111520 !important;
             border: 1px solid rgba(255,255,255,0.1) !important;
@@ -39,17 +63,14 @@ def inject_custom_css():
             color: white !important;
         }
         
-        /* Pills styling */
-        .stPills [data-testid="stMarkdownContainer"] {
-            font-size: 13px !important;
-        }
+        .stPills [data-testid="stMarkdownContainer"] { font-size: 13px !important; }
         </style>
     """, unsafe_allow_html=True)
 
 inject_custom_css()
 
-# Live update feed loop every 90 seconds
-st_autorefresh(interval=90000, limit=500, key="global_news_refresh")
+# Live update feed loop
+st_autorefresh(interval=60000, limit=500, key="global_news_refresh")
 
 # ==========================================
 # 1. PAGE HEADER
@@ -61,11 +82,13 @@ st.write("")
 # ==========================================
 # 2. DATA PIPELINE
 # ==========================================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=60)
 def fetch_all_market_news():
     aggregated_news = []
     for label, ticker in TICKER_MAP.items():
-        API_ENDPOINT = f"http://127.0.0.1:8000/api/data/{ticker}"
+        import urllib.parse
+        safe_ticker = urllib.parse.quote(ticker)
+        API_ENDPOINT = f"http://127.0.0.1:8000/api/data/{safe_ticker}"
         try:
             response = requests.get(API_ENDPOINT, timeout=3)
             if response.status_code == 200:
@@ -94,7 +117,6 @@ news_df = fetch_all_market_news()
 # 3. CHART & UI HELPERS
 # ==========================================
 def create_sentiment_gauge(score):
-    """Generates a compact gauge chart for the top card."""
     normalized_val = ((score + 1) / 2) * 100
     color = "#22ab59" if score > 0.05 else "#ea5455" if score < -0.05 else "#7f7f7f"
 
@@ -111,19 +133,11 @@ def create_sentiment_gauge(score):
     return fig
 
 def create_volume_bar_chart(df, color):
-    """Generates a sparkline bar chart showing volume over recent days."""
     if df.empty: return go.Figure()
-    
-    # Group by date for the sparkline
     df['DateOnly'] = df['Event_Time'].dt.date
     daily_vol = df.groupby('DateOnly').size().tail(10)
-    
     fig = go.Figure(go.Bar(x=daily_vol.index, y=daily_vol.values, marker_color=color, opacity=0.8))
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0), height=50,
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False, hovermode=False
-    )
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=50, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False, hovermode=False)
     return fig
 
 # ==========================================
@@ -132,7 +146,6 @@ def create_volume_bar_chart(df, color):
 if news_df.empty:
     st.info("⏳ Awaiting active data feeds. Ensure your FastAPI server backend pipelines are running.")
 else:
-    # Calculate Macro Metrics
     total_stories = len(news_df)
     pos_df = news_df[news_df['Sentiment'] > 0.05]
     neg_df = news_df[news_df['Sentiment'] < -0.05]
@@ -147,7 +160,6 @@ else:
     elif avg_sentiment < -0.02: mood_str, mood_color = "MILDLY BEARISH", "#ea5455"
     else: mood_str, mood_color = "NEUTRAL / RANGE", "#7f7f7f"
 
-    # --- TOP MACRO METRICS BAR ---
     m_col1, m_col2, m_col3, m_col4 = st.columns([2.2, 1, 1, 1])
     
     with m_col1:
@@ -159,8 +171,6 @@ else:
             with g2:
                 st.write("")
                 st.markdown(f"<div style='color: {mood_color}; font-size: 20px; font-weight: bold; margin-bottom: 15px;'>{mood_str}</div>", unsafe_allow_html=True)
-                
-                # Advancing / Declining numbers
                 s1, s2, s3 = st.columns(3)
                 with s1:
                     st.markdown("<div style='font-size: 11px; color: gray;'>Advancing</div>", unsafe_allow_html=True)
@@ -185,11 +195,10 @@ else:
     with m_col4:
         with st.container(border=True):
             st.metric("Total Stream Volume", f"{total_stories} items")
-            st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True) # Spacer to match height
+            st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True) 
 
     st.write("---")
 
-    # --- FILTER TERMINAL ROW ---
     f_col1, f_col2, f_col3 = st.columns([1.2, 1.5, 2])
     with f_col1:
         selected_asset = st.selectbox("Filter Asset", options=["All Tracked Assets"] + list(TICKER_MAP.keys()), label_visibility="collapsed")
@@ -198,7 +207,6 @@ else:
     with f_col3:
         search_query = st.text_input("Search Headlines", placeholder="Search keywords (e.g., earnings)...", label_visibility="collapsed")
 
-    # --- APPLY FILTER LOGIC ---
     filtered_df = news_df.copy()
     if selected_asset != "All Tracked Assets": filtered_df = filtered_df[filtered_df['Asset_Label'] == selected_asset]
     if sentiment_filter == "Bullish": filtered_df = filtered_df[filtered_df['Sentiment'] > 0.05]
@@ -208,7 +216,6 @@ else:
     
     st.write("") 
 
-    # --- CLEAN UNIFORM STREAM VIEW ---
     if filtered_df.empty:
         st.info("No modern headlines match your target criteria.")
     else:
@@ -220,36 +227,37 @@ else:
                 timestamp = row["Event_Time"].strftime("%Y-%m-%d") if pd.notnull(row["Event_Time"]) else "Unknown Date"
                 source = row.get("Source", "Market Feed")
                 asset_tag = row["Asset_Label"]
+                
+                source_url = "#"
+                for key in ["url", "URL", "Url", "link", "Link"]:
+                    val = row.get(key)
+                    if pd.notna(val) and str(val).strip() != "":
+                        source_url = str(val).strip()
+                        break
                                  
-                if score > 0.05:
-                    badge_color = "#22ab59"
-                    bg_color = "rgba(34, 171, 89, 0.1)"
-                elif score < -0.05:
-                    badge_color = "#ea5455"
-                    bg_color = "rgba(234, 84, 85, 0.1)"
-                else:
-                    badge_color = "#7f7f7f"
-                    bg_color = "rgba(127, 127, 127, 0.1)"
+                if score > 0.05: badge_color, bg_color = "#22ab59", "rgba(34, 171, 89, 0.1)"
+                elif score < -0.05: badge_color, bg_color = "#ea5455", "rgba(234, 84, 85, 0.1)"
+                else: badge_color, bg_color = "#7f7f7f", "rgba(127, 127, 127, 0.1)"
                                  
                 row_col1, row_col2, row_col3 = st.columns([1.2, 5.5, 1.3])
                                  
                 with row_col1:
-                    # Sleek Asset Tag Box
+                    logo_url = get_logo(asset_tag)
                     st.markdown(f"""
-                        <div style='background-color: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); display: inline-block; font-size: 13px; font-weight: 600;'>
+                        <div style='background-color: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); display: inline-flex; align-items:center; font-size: 13px; font-weight: 600;'>
+                            <img src='{logo_url}' width='14' height='14' style='border-radius:50%; background:white; padding:1px; margin-right:6px;'>
                             {asset_tag}
                         </div>
                     """, unsafe_allow_html=True)
                                  
                 with row_col2:
-                    st.markdown(f"<div style='font-weight: 600; font-size: 15px; margin-bottom: 4px;'>{headline}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin-bottom: 4px;'><a class='news-link' href='{source_url}' target='_blank'><b>{headline} ↗</b></a></div>", unsafe_allow_html=True)
                     st.markdown(f"<div style='color: gray; font-size: 12px;'>📅 {timestamp} | Source: {source}</div>", unsafe_allow_html=True)
                                      
                 with row_col3:
-                    # Pill-shaped Sentiment Badge with Signal Icon
                     st.markdown(f"""
                         <div style='background-color: {bg_color}; border: 1px solid {badge_color}; color: {badge_color}; padding: 6px 15px; border-radius: 20px; text-align: center; font-weight: 700; font-size: 14px; display: flex; justify-content: center; align-items: center; gap: 8px;'>
-                            <span style='font-size: 12px;'>((•))</span> {score:+.2f}
+                            <span style='font-size: 12px;'>(•)</span> {score:+.2f}
                         </div>
                     """, unsafe_allow_html=True)
                                  

@@ -18,7 +18,6 @@ from src.config import TICKER_ALIASES, DB_PATH, NEWS_BASE_URL, RSS_FEEDS, USER_A
 load_dotenv()
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
-
 print("🧠 Initializing spaCy NLP Engine for Contextual News Filtering...")
 try:
     nlp = spacy.load("en_core_web_sm")
@@ -31,7 +30,12 @@ print("✅ spaCy NLP Engine ready.")
 
 
 def init_db():
+    # Increased timeout to handle large bulk inserts
     conn = sqlite3.connect(DB_PATH, timeout=5000)
+    
+    # 🚀 CRITICAL FIX: Enables Write-Ahead Logging to prevent "Database is Locked" errors
+    conn.execute("PRAGMA journal_mode=WAL;")
+    
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS raw_news (
@@ -77,7 +81,8 @@ def strict_classify_headline(headline):
 
 
 def normalize_and_store(assigned_ticker, headline, description, url_link, published_at, source):
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    # Added 60-second timeout to allow concurrent processes to finish writing
+    conn = sqlite3.connect(DB_PATH, timeout=60.0)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM raw_news WHERE url = ? OR headline = ?', (url_link, headline))
     
@@ -99,47 +104,57 @@ def normalize_and_store(assigned_ticker, headline, description, url_link, publis
 
 
 def fetch_rss_news():
-    print("🕸️ Scraping live RSS web feeds (90-Day Lookback Active)...")
+    print("🕸️ Scraping multi-source RSS web feeds (90-Day Lookback Active)...")
     inserted_count = 0
-    
-    # --- UPDATED: Changed from days=2 to days=90 ---
-    # This ensures we extract every piece of historical data the RSS feed has left over.
     cutoff_time = datetime.now() - timedelta(days=90)
     
-    for feed_name, feed_url in RSS_FEEDS.items():
-        try:
-            feedparser.USER_AGENT = random.choice(USER_AGENTS)
-            feed = feedparser.parse(feed_url)
+    # Iterate through the dictionary mapping (Asset -> List of URLs)
+    for asset_name, urls in RSS_FEEDS.items():
+        # Ensure fallback compatibility if someone accidentally left a single string instead of a list
+        if not isinstance(urls, list):
+            urls = [urls]
             
-            for entry in feed.entries:
-                standardized_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        seen_headlines = set()  # Track headlines per asset to prevent multi-feed duplicates
+        
+        for feed_url in urls:
+            try:
+                feedparser.USER_AGENT = random.choice(USER_AGENTS)
+                feed = feedparser.parse(feed_url)
                 
-                if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                    from time import mktime
-                    entry_dt = datetime.fromtimestamp(mktime(entry.published_parsed))
+                for entry in feed.entries:
+                    headline = entry.get("title", "")
                     
-                    # Code will now allow articles up to 90 days old
-                    if entry_dt < cutoff_time:
-                        continue 
+                    # Prevent scraping the exact same story if two feeds carry it
+                    if headline in seen_headlines:
+                        continue
+                    seen_headlines.add(headline)
                     
-                    standardized_date = entry_dt.strftime("%Y-%m-%d %H:%M:%S")
-                
-                headline = entry.get("title", "")
-                description = entry.get("summary", "")
-                url_link = entry.get("link", "")
-                source = feed_name  # Natively uses our dictionary names now!
-                
-                assigned_ticker = strict_classify_headline(headline)
-                if assigned_ticker:
-                    if normalize_and_store(assigned_ticker, headline, description, url_link, standardized_date, source):
-                        inserted_count += 1
+                    standardized_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                        from time import mktime
+                        entry_dt = datetime.fromtimestamp(mktime(entry.published_parsed))
                         
-            sleep_time = random.uniform(2.0, 5.0)
-            print(f"   [Sleeping for {sleep_time:.1f}s to avoid rate limits...]")
-            time.sleep(sleep_time)
-            
-        except Exception as e:
-            print(f"⚠️ RSS Scrape Error for {feed_name}: {e}")
+                        # Apply 90-day filter
+                        if entry_dt < cutoff_time:
+                            continue 
+                        
+                        standardized_date = entry_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    description = entry.get("summary", "")
+                    url_link = entry.get("link", "")
+                    source = f"{asset_name} Feed Aggregator"
+                    
+                    assigned_ticker = strict_classify_headline(headline)
+                    if assigned_ticker:
+                        if normalize_and_store(assigned_ticker, headline, description, url_link, standardized_date, source):
+                            inserted_count += 1
+                            
+                sleep_time = random.uniform(1.0, 3.0)
+                time.sleep(sleep_time)
+                
+            except Exception as e:
+                print(f"⚠️ RSS Scrape Error for {asset_name} on {feed_url}: {e}")
             
     return inserted_count
 
@@ -150,9 +165,6 @@ def fetch_and_store_news(query_string):
     
     if NEWS_API_KEY and NEWS_API_KEY != "YOUR_NEWS_API_KEY_HERE":
         end_date = datetime.now()
-        
-        # --- UPDATED: Changed from days=2 to days=90 ---
-        # Tells NewsAPI to search the last 3 months of news archives
         start_date = end_date - timedelta(days=90)
         
         params = {
@@ -162,7 +174,7 @@ def fetch_and_store_news(query_string):
             "language": "en", 
             "sortBy": "publishedAt", 
             "apiKey": NEWS_API_KEY, 
-            "pageSize": 100 # Increased page size to grab more history in one go
+            "pageSize": 100 
         }
         try:
             print(f"📡 Querying NewsAPI for '{query_string}' (90-Day Window)...")
@@ -184,7 +196,6 @@ def fetch_and_store_news(query_string):
                     if assigned_ticker:
                         if normalize_and_store(assigned_ticker, headline, description, url_link, clean_date, source):
                             api_saved += 1
-            # Explicitly warn you in the logs if your API key tier blocks the 90-day request
             elif response.status_code == 426:
                 print("⚠️ NewsAPI Error 426: Your API key tier does not support a 90-day lookback window (capped at 30 days).")
         except Exception as e:

@@ -66,21 +66,23 @@ def get_ticker_payload(ticker: str, background_tasks: BackgroundTasks):
         if symbol == ticker_upper:
             search_keyword = kw
             break
-
+            
     # Register the pipeline functions to execute asynchronously after the response is sent
     if search_keyword:
         background_tasks.add_task(run_pipeline_sync, ticker_upper, search_keyword)
-
+        
+    conn = None
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
-        table_name = f"analytics_{ticker_upper.replace('.', '_')}"
         
-       # 1. READ ANALYTICS CANDLESTICK DATA FROM STORAGE
+        # Sanitize ampersands out of the table names for identical target matching 
+        table_name = f"analytics_{ticker_upper.replace('.', '_').replace('&', '_')}"
+        
+        # 1. READ ANALYTICS CANDLESTICK DATA FROM STORAGE
         try:
-            cached_df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+            cached_df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
             time_series_data = cached_df.to_dict(orient="records")
-        except Exception:  # <-- CHANGED: Now safely catches the Pandas DatabaseError
-            # Table doesn't exist yet, return empty list safely
+        except Exception:  
             time_series_data = []
             
         # 2. FETCH HIGHLIGHT FEED FROM RAW NEWS SCHEMA
@@ -104,7 +106,6 @@ def get_ticker_payload(ticker: str, background_tasks: BackgroundTasks):
                 } for row in news_rows
             ]
         except sqlite3.OperationalError:
-            # raw_news table doesn't exist yet, return empty list safely
             recent_news = []
             
         return {
@@ -116,9 +117,14 @@ def get_ticker_payload(ticker: str, background_tasks: BackgroundTasks):
         
     except Exception as e:
         import traceback
-        print("❌ CRITICAL BACKEND CRASH DETECTED:")
+        print("💥 CRITICAL BACKEND CRASH DETECTED:")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal FinPulse execution crash: {str(e)}")
+    
+    finally:
+        # 🚀 FIX: Absolute garbage collection. Guarantees the database connection is closed.
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)

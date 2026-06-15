@@ -7,7 +7,7 @@ import feedparser
 # Fix paths to find the configuration module safely
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-from src.config import TICKER_MAP ,RSS_FEEDS
+from src.config import TICKER_MAP, RSS_FEEDS
 from src.ingestion.price_fetcher import fetch_and_store_prices, requires_price_update, init_price_table
 from data.news_fetcher import fetch_and_store_news, requires_news_api_call, init_db
 from src.processing.sentiment_analyzer import process_pending_news
@@ -38,7 +38,9 @@ def run_full_system_sync():
             
             # Pull Prices (15-minute interval check)
             if needs_price:
-                fetch_and_store_prices(ticker, period="60d", interval="15m")
+                # 🚀 FIX: Reduced from 60d to 30d. Yahoo Finance strictly limits 15m data to 60 days.
+                # Requesting exactly 60 days often triggers a silent timezone overflow crash!
+                fetch_and_store_prices(ticker, period="30d", interval="15m")
             else:
                 print(f"⏭️ Price data for {ticker} is fresh. Skipping.")
                 

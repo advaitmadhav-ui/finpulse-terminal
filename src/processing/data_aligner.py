@@ -20,7 +20,6 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
     news_df = pd.read_sql_query(news_query, conn, params=(ticker_symbol,))
     
     conn.close()
-
     if price_df.empty:
         print(f"⚠️ Cannot perform alignment. No historical price candles exist for {ticker_symbol}")
         return pd.DataFrame()
@@ -32,7 +31,6 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
         price_df['datetime'] = price_df['datetime'].dt.tz_localize(None)
         
     price_df = price_df.sort_values('datetime')
-
     if news_df.empty:
         # Return price tracks with empty sentiment attributes if no news scores exist yet
         price_df['sentiment_score'] = 0.0
@@ -45,7 +43,6 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
             news_df['datetime'] = news_df['datetime'].dt.tz_localize(None)
             
         news_df = news_df.sort_values('datetime')
-
         # Use a backward tolerance merge (merge_asof) to pair each headline with the upcoming closed market candle
         aligned_df = pd.merge_asof(
             price_df, 
@@ -62,7 +59,9 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
     aligned_df['datetime_str'] = aligned_df['datetime'].astype(str)
     
     write_conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    table_name = f"analytics_{ticker_symbol.replace('.', '_')}"
+    
+    # 🚀 FIX: Sanitizing table name to strip ampersands out so it doesn't cause SQLite syntax errors
+    table_name = f"analytics_{ticker_symbol.replace('.', '_').replace('&', '_')}"
     
     # Drop the complex datetime object before saving to database
     save_df = aligned_df.drop(columns=['datetime'])
@@ -73,7 +72,7 @@ def align_ticker_data(ticker_symbol: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     # Test alignment matrix verification logic
-    test_ticker = "HDFCBANK.NS" # Changed to one of your new valid tickers
+    test_ticker = "HDFCBANK.NS"
     result = align_ticker_data(test_ticker)
     if not result.empty:
         print(f"📊 Alignment complete and cached for {test_ticker}. Matched shape matrix: {result.shape}")

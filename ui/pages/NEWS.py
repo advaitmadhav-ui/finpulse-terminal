@@ -73,11 +73,19 @@ inject_custom_css()
 st_autorefresh(interval=60000, limit=500, key="global_news_refresh")
 
 # ==========================================
-# 1. PAGE HEADER
+# 1. PAGE HEADER & DICTIONARIES
 # ==========================================
 st.markdown("## 📰 Market News Feed")
 st.markdown("<span style='color: gray; font-size: 14px;'>Track top assets, analyze macro trends, and uncover market opportunities.</span>", unsafe_allow_html=True)
 st.write("")
+
+SECTOR_MAP = {
+    "Banking": ["HDFC Bank", "State Bank of India"],
+    "Retail": ["Trent", "DMart"],
+    "Manufacturing": ["Siemens India", "ABB India"],
+    "Automobile": ["Maruti Suzuki", "Mahindra & Mahindra"],
+    "Global Tech": ["Microsoft", "NVIDIA"]
+}
 
 # ==========================================
 # 2. DATA PIPELINE
@@ -199,16 +207,37 @@ else:
 
     st.write("---")
 
+    # --- BUILD SECTOR-WISE DROPDOWN OPTIONS ---
+    dropdown_options = ["All Tracked Assets"]
+    for sector, assets in SECTOR_MAP.items():
+        dropdown_options.append(f"── {sector.upper()} ──")
+        dropdown_options.extend(assets)
+
     f_col1, f_col2, f_col3 = st.columns([1.2, 1.5, 2])
     with f_col1:
-        selected_asset = st.selectbox("Filter Asset", options=["All Tracked Assets"] + list(TICKER_MAP.keys()), label_visibility="collapsed")
+        selected_asset = st.selectbox("Filter Asset or Sector", options=dropdown_options, label_visibility="collapsed")
     with f_col2:
         sentiment_filter = st.pills("Filter Sentiment", options=["All", "Bullish", "Bearish", "Neutral"], default="All", label_visibility="collapsed")
     with f_col3:
         search_query = st.text_input("Search Headlines", placeholder="Search keywords (e.g., earnings)...", label_visibility="collapsed")
 
+    # --- APPLY FILTER LOGIC ---
     filtered_df = news_df.copy()
-    if selected_asset != "All Tracked Assets": filtered_df = filtered_df[filtered_df['Asset_Label'] == selected_asset]
+    
+    if selected_asset != "All Tracked Assets":
+        if selected_asset.startswith("── "):
+            # If user clicked a Sector Header, filter to ALL assets in that sector
+            clean_sector_name = selected_asset.replace("── ", "").replace(" ──", "")
+            target_assets = []
+            for s, a in SECTOR_MAP.items():
+                if s.upper() == clean_sector_name:
+                    target_assets = a
+                    break
+            filtered_df = filtered_df[filtered_df['Asset_Label'].isin(target_assets)]
+        else:
+            # If user clicked a specific asset
+            filtered_df = filtered_df[filtered_df['Asset_Label'] == selected_asset]
+            
     if sentiment_filter == "Bullish": filtered_df = filtered_df[filtered_df['Sentiment'] > 0.05]
     elif sentiment_filter == "Bearish": filtered_df = filtered_df[filtered_df['Sentiment'] < -0.05]
     elif sentiment_filter == "Neutral": filtered_df = filtered_df[(filtered_df['Sentiment'] >= -0.05) & (filtered_df['Sentiment'] <= 0.05)]
@@ -257,7 +286,7 @@ else:
                 with row_col3:
                     st.markdown(f"""
                         <div style='background-color: {bg_color}; border: 1px solid {badge_color}; color: {badge_color}; padding: 6px 15px; border-radius: 20px; text-align: center; font-weight: 700; font-size: 14px; display: flex; justify-content: center; align-items: center; gap: 8px;'>
-                            <span style='font-size: 12px;'>(•)</span> {score:+.2f}
+                            <span style='font-size: 12px;'>((•))</span> {score:+.2f}
                         </div>
                     """, unsafe_allow_html=True)
                                  

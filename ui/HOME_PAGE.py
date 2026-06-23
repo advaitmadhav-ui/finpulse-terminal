@@ -14,7 +14,7 @@ from streamlit_autorefresh import st_autorefresh
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.config import TICKER_MAP
 
-# 🔄 FAST LIVE REFRESH: Set to 15 seconds (15,000 ms) for terminal-like responsiveness
+# 🔄 FAST LIVE REFRESH
 st_autorefresh(interval=60000, limit=500, key="live_market_refresh")
 
 # Initialize Session State for Routing
@@ -189,7 +189,6 @@ def fetch_fundamental_data():
             roa = (info.get('returnOnAssets') or 0) * 100 
             pe = info.get('trailingPE') or 0
 
-            
             metrics.append({
                 "Asset": label,
                 "Ticker": ticker,
@@ -209,7 +208,6 @@ def fetch_fundamental_data():
     ranks['ROI_R'] = df['ROI (%)'].rank(ascending=True)
     ranks['PE_R'] = df['P/E'].apply(lambda x: x if x > 0 else 9999).rank(ascending=False)
 
-    
     max_possible_rank = len(df) * 5
     df['Overall Score'] = (ranks.sum(axis=1) / max_possible_rank) * 100
     return df.sort_values('Overall Score', ascending=False).reset_index(drop=True)
@@ -221,7 +219,7 @@ def get_market_timing_badge(ticker):
     if ".NS" in ticker:
         market_name, hours, flag = "NSE / BSE (India)", "09:15 AM - 03:30 PM IST", "🇮🇳"
     else:
-        market_name, hours, flag = "NASDAQ / NYSE (US)", "04:00 AM - 08:00 PM EST", "🇺🇸"
+        market_name, hours, flag = "NASDAQ / NYSE (US)", "09:30 AM - 04:00 PM EST", "🇺🇸"
         
     return f"""
         <div style='display: inline-flex; align-items: center; background-color: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 15px; margin-bottom: 15px;'>
@@ -249,13 +247,9 @@ def create_mini_chart(df, color, start_price, ticker):
     
     fig.add_hline(y=start_price, line_dash="dot", line_color="gray", line_width=1, opacity=0.5)
 
-    latest_date = df['datetime'].dt.date.iloc[-1]
-    if ".NS" in ticker:
-        x_start = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(9, 15)))
-        x_end = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(15, 30)))
-    else:
-        x_start = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(4, 0)))
-        x_end = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(20, 0)))
+    # ✅ FIX: Inherit boundaries directly from data to avoid Timezone Aware vs Naive mismatch bounds
+    x_start = df['datetime'].min()
+    x_end = df['datetime'].max()
 
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=0), height=120, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
@@ -326,7 +320,7 @@ def render_overview_dashboard():
     st.write("")
 
     st.markdown("### 🏛️ Fundamental Health Rankings")
-    st.caption("Cross-asset evaluation using EPS, Profit Margin, ROE, ROI, P/E, and Debt-to-Equity. Click a row or bar to view detailed metrics.")
+    st.caption("Cross-asset evaluation using EPS, Profit Margin, ROE, ROI, and P/E. Click a row or bar to view detailed metrics.")
     
     with st.spinner("Compiling global fundamental data..."):
         fundamentals_df = fetch_fundamental_data()
@@ -387,7 +381,6 @@ def render_overview_dashboard():
                         "ROE (%)": st.column_config.NumberColumn("ROE", format="%.1f%%"),
                         "ROI (%)": st.column_config.NumberColumn("ROI (Assets)", format="%.1f%%"),
                         "P/E": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
-                        "D/E": st.column_config.NumberColumn("Debt/Equity", format="%.2f"),
                     }
                 )
                 
@@ -438,12 +431,9 @@ def render_dynamic_stock_chart(time_series_data, ticker_name):
             previous_days_df = df[df['datetime'].dt.date < latest_date]
             start_price = previous_days_df['close'].iloc[-1] if not previous_days_df.empty else df_filtered['close'].iloc[0]
             
-            if ".NS" in ticker_name:
-                x_start = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(9, 15)))
-                x_end = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(15, 30)))
-            else:
-                x_start = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(4, 0)))
-                x_end = pd.Timestamp(datetime.datetime.combine(latest_date, datetime.time(20, 0)))
+            # ✅ FIX: Extract boundaries directly from the data series to automatically match Timezone-Aware formats
+            x_start = df_filtered['datetime'].min()
+            x_end = df_filtered['datetime'].max()
             x_axis_range = [x_start, x_end]
             
         elif selected_period == "1W":
@@ -497,25 +487,11 @@ def render_dynamic_stock_chart(time_series_data, ticker_name):
     
     if selected_period == "1D":
         fig.add_hline(y=start_price, line_dash="dot", line_color="gray", line_width=1.5, opacity=0.6, annotation_text="Prev. Close", annotation_position="bottom right", annotation_font_size=10, annotation_font_color="gray")
-        
-        # Add Extended Hours Background Zones for Global Stocks
-        if ".NS" not in ticker_name:
-            latest_date_val = df_filtered['datetime'].dt.date.max()
-            fig.add_vrect(
-                x0=pd.Timestamp(datetime.datetime.combine(latest_date_val, datetime.time(4, 0))),
-                x1=pd.Timestamp(datetime.datetime.combine(latest_date_val, datetime.time(9, 30))),
-                fillcolor="gray", opacity=0.1, line_width=0, annotation_text="Pre-Market", annotation_position="top left", annotation_font_size=10, annotation_font_color="gray"
-            )
-            fig.add_vrect(
-                x0=pd.Timestamp(datetime.datetime.combine(latest_date_val, datetime.time(16, 0))),
-                x1=pd.Timestamp(datetime.datetime.combine(latest_date_val, datetime.time(20, 0))),
-                fillcolor="gray", opacity=0.1, line_width=0, annotation_text="Post-Market", annotation_position="top right", annotation_font_size=10, annotation_font_color="gray"
-            )
 
     if ".NS" in ticker_name:
         closed_hours = [15.5, 9.25]
     else:
-        closed_hours = [20.0, 4.0]
+        closed_hours = [16.0, 9.5]
     hourly_break = dict(bounds=closed_hours, pattern="hour") if selected_period == "1W" else dict(values=[])
     
     fig.update_layout(

@@ -24,30 +24,34 @@ init_db()
 app = FastAPI(
     title="FinPulse Core API Engine", 
     description="Automated FastAPI backend orchestrating live asset price pulling, news fetching, and FinBERT analytics.",
-    version="1.1.1"
+    version="1.1.2"
 )
 
 def run_pipeline_sync(ticker_symbol: str, keyword: str):
     """Orchestrates data collection, scoring, and calculations in the background ONLY if stale."""
     try:
-        if requires_news_api_call(ticker_symbol, cooldown_hours=3):
-            print(f"🔄 Background Pipeline Auto-Triggered for: {ticker_symbol}")
-            
-            # 1. Pull latest price bars
+        data_updated = False
+        
+        # 1. PRICE PIPELINE: Update prices frequently 
+        if requires_price_update(ticker_symbol):
+            print(f"📈 Background trigger: Fetching new prices for {ticker_symbol}")
             fetch_and_store_prices(ticker_symbol, period="60d", interval="15m")
+            data_updated = True
             
-            # 2. Pull fresh headlines (Using strict regex engine)
+        # 2. NEWS PIPELINE: Update news slowly (every 1 hour) to avoid getting banned by scraping filters
+        if requires_news_api_call(ticker_symbol, cooldown_hours=1):
+            print(f"📰 Background trigger: Fetching new headlines for {ticker_symbol}")
             fetch_and_store_news(keyword)
-            
-            # 3. Process with FinBERT model
             process_pending_news()
+            data_updated = True
             
-            # 4. Re-calculate metrics and update SQLite cache
+        # 3. RE-ALIGNMENT: Only merge and recalculate if new data was actually downloaded
+        if data_updated:
             align_ticker_data(ticker_symbol)
-            
             print(f"✅ Background Pipeline Sync Complete for: {ticker_symbol}")
         else:
             print(f"⏭️ Skipping background sync for {ticker_symbol}: Cache is fresh.")
+            
     except Exception as e:
         print(f"❌ Background Pipeline Error: {e}")
 
@@ -122,7 +126,6 @@ def get_ticker_payload(ticker: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=f"Internal FinPulse execution crash: {str(e)}")
     
     finally:
-        # 🚀 FIX: Absolute garbage collection. Guarantees the database connection is closed.
         if conn:
             conn.close()
 
